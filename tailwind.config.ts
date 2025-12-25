@@ -23,6 +23,12 @@ module.exports = {
                             marginTop: '1.5em',
                             marginBottom: '0.5em',
                         },
+                        'code::before': {
+                            content: '""',
+                        },
+                        'code::after': {
+                            content: '""',
+                        },
                     },
                 },
 

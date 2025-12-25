@@ -37,7 +37,7 @@ function Links() {
 function Bio() {
   return (
     <p className="text-lg">
-      I&apos;m Ashish Rao, a soon-to-be software engineer at Nvidia working on JAX (a Python library to write hardware accelerated numerical programs).
+      I&apos;m Ashish Rao, a software engineer at Nvidia working on JAX (a Python library to write hardware-accelerated numerical programs).
       I&apos;m broadly interested in AI, programming languages, compilers,
       and distributed systems. Check out my blog, and feel free to say hello via email
       to <em>ashish dot arartc at gmail.com</em>.

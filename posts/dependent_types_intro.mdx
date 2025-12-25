@@ -1,0 +1,377 @@
+---
+title: 'An Introduction to Dependent Types in Lean'
+date: '2025-12-24'
+description: "Dependent Types and the Curry-Howard Correspondence."
+---
+
+<figure>
+  <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+    <img 
+      src="/personal-website/dependent_types_intro/blue_flower.jpg" 
+      alt="Kōshirō Onchi's Blue Flower"
+      style={{ width: '50%', height: 'auto', marginBottom: '0px', marginTop: '0px'  }}
+    />
+    <img 
+      src="/personal-website/dependent_types_intro/purple_flower.jpg" 
+      alt="Kōshirō Onchi's Purple Flower"
+      style={{ width: '50%', height: 'auto', marginBottom: '0px', marginTop: '0px' }}
+    />
+  </div>
+  <figcaption style={{ textAlign: 'center' }}>
+    Left: <em>Blue Flower</em>, Right: <em>Purple Flower</em>. Kōshirō Onchi, 1946.
+  </figcaption>
+</figure>
+
+
+Many months ago, I began working through the textbook [Theorem Proving in Lean 4](https://leanprover.github.io/theorem_proving_in_lean4/). Alas, work picked up, life got in the way, my tendencies towards procrastination triumphed, and my plans were thwarted. This post marks the beginning of an attempt to restart this project; I plan to do a series explaining what I learn as I work through the textbook. Here we will cover some material from ~ chapters 1 - 4, with a particular focus on trying to understand dependent type systems and their uses. As an aside, I am basically completely new to formal methods / interactive theorem proving, so if you spot any errors or gaps in my understanding, please leave a comment (as an aside, we now have comments through [giscus](https://giscus.app/)!).
+
+You can see my solutions to the textbook exercises for chapters 3 and 4 [here](https://github.com/rao-ashish/learning-lean) (solutions for more chapters should be coming soon).
+
+## What is Lean?
+
+Lean is a programming language that can be used to write machine-verifiable proofs. These can be proofs of mathematical statements (e.g. Cantor's theorem, the fundamental theorem of algebra, that sort of thing), or proofs that programs have certain properties (e.g. the result of executing function `f` on any input `x` will be a list such that for all `i < j, a[i] < a[j]`).
+
+Proofs in Lean leverage its expressive type system. Specifically, we encode statements we'd like to prove as types. For example, the type `a -> b` encodes the assertion 'a implies b'. A proof of a statement is a program that constructs a value with the statement's type. The equivalence of types and logical statements, and of proofs and programs, is known as the Curry-Howard Correspondence. The specific type system used by lean to implement /operationalize this idea is known as the Calculus of Inductive Constructions.
+
+
+## What are type systems anyway?
+
+A type is a set of values that an expression can evaluate to. Type systems make sure that a type can be deduced for all expressions in your program; they help you guarantee that expressions in your code take on only some specific set of values. For example, if we have `int x = SomeFunction(y);` in a well-typed program, we know that `SomeFunction(y)` will always evaluate to an integer. This prevents bugs like calling a function with arguments that aren't meaningful (what does `x + 1` mean if `x` is a hashtable?), or accidentally manipulating a variable under the assumption it holds data of a specific type when it actually holds data of a different one.
+
+ARM assembly language is an example of an untyped language; the programmer just manipulates bytes, and if they make a mistake like thinking a variable holds integer data when it's actually holding something else, well, too bad. Python is an example of a dynamically typed language; as a Python program executes, the interpreter ensures you aren't doing something strange like trying to add a linked list and a dictionary, and if it detects something wrong, an exception is thrown. C++ is an example of a statically typed language; you can't run your program at all if it's not well-typed (an ill-typed program won't compile).
+
+
+## What are dependent type systems?
+
+Dependent type systems like Lean's have a few important properties:
+1. Types are first-class objects; values be 'type objects'.
+2. The type of an expression may depend on values.
+
+The term 'value' requires some clarification. By this I don't mean values computed at runtime while the program executes. Rather, note that the Lean compiler is free to evaluate some expressions while type-checking a program. The values of such expressions are what I'm referring to in the two properties listed above; these values are not actually materialized at runtime.
+
+For example, consider the function `List.cons`. We can fire up a Lean interpreter, and enter in 
+```
+#check List.cons
+```
+to ask Lean to tell us the type of this function. Lean reports back:
+```
+List.cons.{u} {α : Type u} (head : α) (tail : List α) : List α
+```
+
+Let's ignore the `u` for now. We see that `List.cons` is a function that takes in a value `α` which is a type object, takes in a value `head` which is of type `α`, takes in a value `tail` which is of type `List α`, and returns a value of type `List α`. We thus see that:
+1. Types are first-class objects. `List.cons` takes as its first argument a type object. In fact, `List` itself is a function of type `Type -> Type` (so `List α` is us calling the `List` function with a type object `α` to get a new type object `List α`.).
+2. The types of expressions can depend on values. Consider the expression `List.cons α`. Its type will be `α -> List α -> List α`. As such, `List.cons α` has a _dependent_ type where its type depends on the value of `α`.
+
+
+## Can't we just do this with polymorphism?
+
+Many languages implement some form of parametric polymorphism, where we can use type variables to get a single piece of code to work for multiple types. For example, in C++, we can use templates to write the following:
+
+```
+template <typename T>
+List<T> ListCons(T head, List<T> tail) {
+  ...
+}
+
+int main() {
+  List<int> some_list;
+  ...
+  List<int> new_list = ListCons(123, some_list);
+  ...
+}
+```
+
+C++ does not have a dependent type system. The type variable `T` is not a value holding a 'type object', it's more of a 'placeholder' which the compiler will fill in by statically analyzing the program (i.e. without evaluating any expressions). Based on what it deduces should fill in the placeholder `T`, the compiler will emit and dispatch to different copies of `ListCons`. But it seems like we've achieved the same behavior as the `List.cons` function in Lean, so why bother with dependent types at all?
+
+While polymorphism does allow us to write code that can work for multiple types, it's not as powerful as dependent types. Here's an example with dependent types that cannot easily be expressed with polymorphism:
+
+```
+def vector_is_large {n : Nat} {α : Type} (_ : Vector α n) : Bool :=
+    n > 4
+
+def add_vector_8 (v1 : Vector Nat 8) (v2 : Vector Nat 8) : (Vector Nat 8) :=
+    Vector.zipWith (fun (a : Nat) (b : Nat) => a + b) v1 v2
+
+def v1 : Vector Nat 8 := Vector.replicate 8 1
+def v2 : Vector Nat 8 := Vector.replicate 8 2
+
+/- [3, 3, ... 3] -/
+#eval add_vector_8 v1 v2
+
+/- true -/
+#eval vector_is_large v1
+```
+
+`Vector α n` is a dependent type (it depends on the value of `n`). `vector_is_large` has a dependent function type; the type of the input vector `v` depends on an earlier argument to the function called `n` (the curly braces around `n` in the definition of `vector_is_large` mean that this argument is implicit; the Lean compiler will infer its value based on `v` while type-checking the program). `add_vector_8` is defined to only work with vectors of size 8.
+
+It is not possible to express such a program with parameteric polymorphism. At best, we could do something like this:
+
+```
+template <typename T>
+bool VectorIsLarge(std::vector<T> v) {
+  return v.size() > 4;
+}
+
+std::vector<uint> AddVector8(std::vector<uint> v1, std::vector<uint> v2) {
+  if (v1.size() != 8 || v2.size() != 8) {
+    throw std::invalid_argument("Input vectors must have length 8.");
+  }
+  ...
+}
+```
+
+Unlike the program in Lean, we cannot bake the size of the vector into its type. As such, we need to rely on _runtime_ checks on its size instead of Lean's _compile time_ type checking.
+
+
+## Some basic proofs in Lean
+
+The examples below are a whirlwind tour to give you a flavour of what proofs in Lean look like. I won't go into much detail about syntax and other specifics here; for that, please see the textbook.
+
+Here's a proof that if `q → r` and `p → q`, then `p → r`:
+
+```
+example (h1 : q → r) (h2 : p → q) : p → r :=
+  fun h3 : p =>
+  show r from h1 (h2 h3)
+```
+
+Here's a proof that `p ∧ q → q ∧ p`, and another for `p ∨ q → q ∨ p`:
+
+```
+example (h : p ∧ q) : q ∧ p :=
+  And.intro (And.right h) (And.left h)
+
+example (h : p ∨ q) : q ∨ p :=
+  Or.elim h
+    (fun (hp : p) =>
+      show q ∨ p from Or.intro_right q hp)
+    (fun (hq : q) =>
+      show q ∨ p from Or.intro_left p hq)
+```
+
+We can encode the `∀` quantifier using functions that take in arbitrary values of an appropriate type, as in this example (see chapter 4 of the textbook):
+
+```
+example (α : Type) (p q : α → Prop) :
+    (∀ x : α, p x ∧ q x) → ∀ y : α, p y :=
+  fun h : ∀ x : α, p x ∧ q x =>
+  fun y : α =>
+  show p y from (h y).left
+```
+
+If we want to say that there exists some value `x` with some property, we encode this with a pair where the first element is the specific `x` with that property, and the second is a proof that `x` does in fact have that property (again, see chapter 4):
+
+```
+example : ∃ x : Nat, x > 0 :=
+  have h : 1 > 0 := Nat.zero_lt_succ 0
+  Exists.intro 1 h
+```
+
+## Type universes
+
+### Basics
+
+We said that types are first class objects in Lean. Then, if a value is a type object, what is the type of that value?
+
+Let's check:
+```
+def v := Bool
+#check v        -- This is the same thing as `#check Bool`.
+> Type
+```
+
+So the type of `Bool` is `Type`. Then, what is the type of `Type`? We might assume that it is again just `Type`, but we get:
+
+```
+#check Type
+> Type 1
+```
+
+Similarly:
+
+```
+#check Type 1
+> Type 2
+```
+
+It turns out that types are organized into a hierarchy, with each level of the hierarchy being called a 'universe'. Lean organizes types into a hierarchy of universes to prevent you from being able to express paradoxical statements (I'll give you an example soon of what goes wrong if we don't have type universes, but we've got a bit of background to cover before then). As shown above, type universes are denoted by `Type` followed by an index, for example `Type 0` or `Type 17`. Regrettably, these universes are also denoted by `Sort` followed by an index one greater than the index we would use if we were denoting things by `Type`. So, `Type 0` is the same thing as `Sort 1`, and `Type 17` is the same thing as `Sort 18`.
+
+In general, here's how we determine the sort level containing a type `α`:
+- If `α = Sort u`, then `α ∈ Sort u+1`.
+- Otherwise, if we have some type `α` which has `u` as the maximum sort level of any type that appears inside of `α`, then `α ∈ Sort u`. For example:
+  - Let `α = Nat → Bool`. Note that `Nat ∈ Sort 1` and `Bool ∈ Sort 1`. Thus, `u = 1`, so `α ∈ Sort 1`.
+  - Let `α = Nat → Sort 1`. Note that `Nat ∈ Sort 1` and `Sort 1 ∈ Sort 2`. Thus, `u = 2`, so `α ∈ Sort 2`.
+
+The one exception to the above rule is a special type universe called `Prop`.
+
+
+### The `Prop` Type Universe
+
+I mentioned earlier that we encode logical statements as types. The types we use to do so are generally members of a special type universe called `Prop`. This is because `Prop` is an exception to the rule I mentioned about determining the universe levels of types. Specifically, for any types `α, β, γ` where `α = β -> γ` and `γ ∈ Prop`, `α ∈ Prop` _regardless of the sort level of `β`_. We call this property of `Prop` _impredicativity_.
+
+It's nice that `Prop` is impredicative because it allows us to express logical statements about types that are arbitrarily high up in the type hierarchy. For example, we can write down a statement like `def v := Eq (Sort 18) (Sort 18)`; this defines a value `v` that equals a type object which encodes the logical statement "`Sort 18` is equal to `Sort 18`". If we check the type of `v`, we will see that it has type `Prop`, instead of type `Sort 18` like our previous rule would have implied. The fact that `v` is still a `Prop` due to `Prop`'s impredicativity is nice because it makes `v` compatible with the other constructs in Lean that we have available to manipulate logical expressions, for example `Iff : (a : Prop) -> (b : Prop) -> Prop` and `Or : (a : Prop) -> (b : Prop) -> Prop`.
+
+
+### What goes wrong without type universes?
+
+If we didn't have type universes, we could write down programs like this:
+
+```
+def TypeSet := Type → Prop
+def S : TypeSet := fun (T : TypeSet) => ¬(T T)
+
+def contradiction : False :=
+  have hnss : ¬(S S) := fun (h : S S) => h h
+  have hss : (S S) := hnss
+  hnss hss
+```
+
+The above encodes Russell's Paradox: "If S is the set of all sets that do not contain themselves, does S contain itself?". In the program, we represent sets of types using `TypeSet`. If `A` is a `TypeSet`, then `A T` encodes the logical statement `T ∈ A`. If we are able to construct a value of type `A T`, we have proved that `T ∈ A`. After defining `TypeSet`, we define a specific `TypeSet S`, where `S T` is true only if `T ∉ T`. Finally, we use this to prove `False`. We know that `S ∉ S` because if `S ∈ S`, from the definition of `S` we have that `S ∉ S`. Since we know `S ∉ S`, this also means by the definition of `S` that `S ∈ S`. Thus, we have a contradiction. 
+
+Type universes prevent this problem by making it impossible to write down `S` as defined above (the type checker would throw an error). Since `TypeSet := Type → Prop`, `TypeSet ∈ Sort 2` (because `Type : Sort 2` and `Prop : Sort 1`, we take the max and get `Sort 2` for `TypeSet`). Since `TypeSet ∈ Sort 2`, the `T T` inside the definition of `S` is ill-typed because `T` is a function type that expects an input with type `Type` (i.e. it expects an argument inside `Sort 1`) but we are trying to pass in an argument inside `Sort 2`, which has a fundamentally higher universe level. Lean gives the following error when type checking the program at that line:
+
+```
+Application type mismatch: The argument
+  T
+has type
+  TypeSet
+but is expected to have type
+  Type
+in the application
+  T T
+```
+
+### Why do type universes guarantee that we cannot create contradictions?
+
+I won't give a rigorous argument here, but sketch some intuition for why this is the case.
+
+Say we write down an expression `e` in Lean. If we can guarantee that the evaluation of `e` will always terminate (i.e. if the language is _normalizing_), we know that `e` must reduce to a value. Since `False` is by definition a type with no constructors, `e` cannot evaluate to `False`. Type universes guarantee that we cannot create contradictions (i.e. write down expressions that evaluate to `False`) by guaranteeing that the evaluation of any expression `e` will terminate.
+
+There are three natural questions here:
+1. Does enforcing that the evaluation of any expression terminates reduce the expressive power of the language?
+2. What goes wrong in a language where `False` is defined as a type with no constructors, but we allow nonterminating programs?
+3. How do type universes guarantee that the evaluation of any expression will terminate?
+
+For (1), the answer is _yes_. We know that for Turing machines, the Halting problem is undecideable; it is impossible to algorithmically determine for any given program whether or not it will terminate on a Turing machine. Thus, if a programming language is Turing-complete, it _must_ be the case that it is not provable that every program written in that language will terminate. However, Lean is still Turing-complete because of an escape hatch included in the language known as the `partial` keyword. I won't go into details here, but it turns out that you can use the `partial` keyword to write down expressions in Lean which it cannot prove are terminating. However, the type checker is prohibited from evaluating such expressions during type checking (it will throw an error if it runs into one).
+
+For (2), let's say we tried to develop a language that does this. Say that we must type-check some expression, and while type checking, it becomes necessary to evaluate an expression `e`. Say that we do not force `e` to be nonterminating through e.g. type universes. Now what?
+- We could try to automatically detect when `e` is nonterminating, and have the type checker throw an error if this is the case. This would require solving the Halting problem, so this is impossible.
+- We could try to give the type checker a 'compute budget' of some kind, and throw an error when it exceeds this budget. But now, the correctness of our type checker becomes dependent on the expression we are type checking and the hardware we are running on. If `e = factorial 100`, there's no way we can compute this within a reasonable budget, but if it had been `e = factorial 10`, then we would have succeeded. This asymmetry is not an appealing property.
+  - Note: This is the best argument I could think of when considering this 'compute budget' design, and to be honest, I don't find it so convincing. Even if we enforced termination using e.g. type universes, we have practical limits on how much time we can spend type-checking a program because we need to quickly give feedback to the programmer. As such, this design in my mind just makes concrete an already-present practical constraint.
+  - My skepticism probably comes from an orientation towards engineering as opposed to mathematics. If we did not care about practical constraints like needing to type-check expressions quickly, and only cared about the 'pure' / 'idealized' properties of our type checker, then yes, the compute budget design is limited.
+- If we want to avoid both of the problems above, we are left having to enforce that the evaluation of expressions always terminates.
+
+For (3), a Google search on "proving strong normalization for the calculus of inductive constructions" would give you the best answers, but in the meantime, here's a super hand-wavy explanation vibe-written with the help of Gemini 3 Pro:
+
+Type universes prevent nontermination by preventing self-application. Since Lean is a functional language, by 'evaluation' we essentially mean repeatedly performing 'reduction rules' (basically string substitutions) whenever we see function applications in the AST of `e` (see my previous post on [building a Lambda Calculus interpreter in Rust](https://rao-ashish.github.io/personal-website/blog/rust_lambda_calc_1/) for more info). In such functional languages, self-application is the fundamental way in which we construct expressions whose evaluation does not terminate; we would eventually need to hit an expression that looks like `e' e'` during our evaluation. But, `e' e'` cannot be well-typed with type universes, because if it was, what would be the type of `e'`? Since we are applying it to an argument, `e'` must be a function, so the type of `e'` must be inside `Sort u` for `u >= 1`. `e'` is taking in `e'` as input, so the type of `e'` must look something like `Sort u -> ...`. But then, `Sort u : Sort u+1`, so the type of `e'` must have universe level at least `u+1`, giving us a contradiction because we previously said that the type of `e'` has sort level `u`.
+
+
+## Some examples that confused me
+
+### Sharp edges with dependent types
+
+
+This apparently doesn't compile!
+
+```
+def fn (n : Nat) : Type :=
+  match n == 0 with
+  | true => Nat
+  | false => Bool
+
+def some_list_nat : List Nat :=
+  [1, 2, 3]
+
+def some_list_bool : List Bool :=
+  [true, false, true]
+
+def make_list (n : Nat) : List (fn n) :=
+  match n == 0 with
+  | true => some_list_nat
+  | false => some_list_bool
+```
+
+For example, when trying to return some_list_nat, we get the error:
+
+```
+Type mismatch
+  some_list_nat
+has type
+  List Nat
+but is expected to have type
+  List (fn n)
+```
+
+If we rewrite `make_list` as follows however, we are able to compile the program:
+
+```
+def make_list (n : Nat) : List (fn n) :=
+  match n with
+  | 0 => some_list_nat
+  | _ + 1 => some_list_bool
+```
+
+The issue here is related to how Lean type-checks `match` statements. When type-checking the arms of a `match`, the type checker only keeps track of the value of the condition for that arm. This means that for the first implementation, the type checker keeps track that the condition (`n == 0`) is `true` or `false`, but it does not 'remember' the association between this boolean value and the value of `n`. In other words, the type checker remembers "the boolean expression `n == 0` evaluates to true / false", but does not use this to gain information about the value of `n`. In the second implementation however, we are directly matching on the value of `n`, so the context that the type checker has inside the match statement is precisely the value of `n`, not the value of an "unrelated" boolean (it remembers that "the Nat `n` evaluates to 0 / something +1", which is information it is able to meaningfully use when type-checking). Thus, the type checker is able to verify that the program is well-typed.
+
+### Pattern matching
+
+Consider the following:
+
+```
+def nat_to_type (a : Nat) : Type :=
+    match a with
+    | 0 => Bool
+    | _ => String
+
+def type_to_nat (t : Type) : Nat :=
+    match t with
+    | Bool => 100
+    | _ => 200
+```
+
+Lean marks the 'default' arm of `type_to_nat` as redundant; it says that any expression `t` will match against one of the preceding arms. What gives?
+
+It turns out that pattern matching only works with _inductive types_. These are types that are defined by a finite set of constructors. For example:
+- `Nat` has two constructors: `Nat.zero` and `Nat.succ`.
+- `List` has two constructors: `List.nil` and `List.cons`.
+- We can define an inductive type `ClassicalElements` with four constructors:
+
+```
+inductive ClassicalElement where
+| earth : ClassicalElement
+| air   : ClassicalElement
+| fire  : ClassicalElement
+| water : ClassicalElement
+```
+
+Notably, `Type` is NOT an inductive type; there is no fixed finite set of constructors for `Type` objects. As such, when Lean tries to type-check `type_to_nat`, it ends up thinking that `Bool` is not the boolean type we are thinking of, but thinks that `Bool` is a _type variable_ that can match _any_ type. As such, the first arm ends up matching against every value `t` can take, and the second arm is redundant.
+
+Inductive types are covered in chapter 7, so we're getting ahead of ourselves (this post was meant to be ~chapters 1 - 4), but you can treat this as a sneak peek of what's to come I suppose.
+
+### Encoding Russell's Paradox
+
+Here was my first attempt encoding Russell's Paradox.
+
+```
+-- (is_in A B) means that A ∈ B.
+axiom is_in : (A : Type) → (B: Type) → Prop
+
+-- There is some type S.
+axiom S : Type
+
+-- The elements of S obey this constraint.
+axiom def_S : (T : Type) → is_in T S ↔ ¬ is_in T T
+
+-- Any type is either in S or not in S.
+axiom in_or_not : (T : Type) → (is_in T S) ∨ (¬ is_in T S)
+
+-- Show a contradiction by considering whether S ∈ S.
+def contradiction : False :=
+  Or.elim (in_or_not S)
+    (fun (h : is_in S S) => ((def_S S).mp h) h)
+    (fun (h : ¬is_in S S) => h ((def_S S).mpr h))
+```
+
+It turns out that this program type-checks just fine in Lean! I was surprised at this, because I thought that this is exactly the kind of thing Lean is supposed to prevent you from doing? 
+
+The issue here is that the `axiom` keyword is basically telling Lean "hey, just trust me that there exists in scope a value of this type". In some sense, by using `axiom`, we are bypassing the constraints that the type checker would impose on us. Rather than just asserting the existence of an object `S` with the property `def_S`, we need to encode things in a way such that we construct `S` with this property, as in the presentation in the 'type universes' section above.

@@ -10,6 +10,9 @@ import { MDXRemote } from 'next-mdx-remote/rsc';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
+// Import Comments component
+import Comments from '@/components/Comments';
+
 // This function gets the content for a single post.
 async function getPost(post_id: string) {
     const postsDirectory = path.join(process.cwd(), 'posts');
@@ -41,7 +44,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
     return (
         <div>
             {/* Header Banner */}
-            <header className="bg-white py-4 px-8 border-b border-gray-400">
+            <header className="sticky top-0 z-50 bg-white py-4 px-8 border-b border-gray-400">
                 <nav className="max-w-5xl mx-auto flex justify-start items-center gap-x-6">
                     <Link href="/blog" className="font-semibold text-gray-700 hover:text-black hover:underline transition-colors">
                         Home
@@ -68,6 +71,12 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                         }}
                     />
                 </article>
+
+                {/* Comments Section */}
+                <div className="mt-12 pt-8 border-t border-gray-300">
+                    <h2 className="text-2xl font-bold mb-6">Comments</h2>
+                    <Comments term={`blog:${slug}`} />
+                </div>
             </main>
         </div>
     );
