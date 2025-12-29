@@ -22,6 +22,17 @@ description: "Dependent Types and the Curry-Howard Correspondence."
   </figcaption>
 </figure>
 
+<div className="text-red-800 [&_a]:text-red-800">
+
+DISCLAIMER: I do not have a background in type theory, so there are some inaccuracies and oversimplifications in this post. Please see the comments on [this reddit post](https://www.reddit.com/r/ProgrammingLanguages/comments/1px72jq/blog_notes_on_learning_lean_dependent_types_type/) for more. The main errors are:
+
+<details>
+1. **Types vs Sets**: I say that types are sets of values in the 'what are type systems' section of this post; this is an oversimplification.
+2. **Russell's Paradox**: The formalization given of Russell's paradox is incorrect due to conflating `TypeSet` and `Type`. I will update this post soon to include a corrected version.
+3. **Comparison to C++**: When comparing dependent types and C++ templates, a better comparison to Lean's `Vec` type would have been `std::array` instead of `std::vector`. With `std::array`, it actually _is_ possible to implement the desired behavior in C++ since we can specialize the `std::array` type to specific lengths (e.g. we can write the type `std::array<int, 8>`). The point about dependent types being fundamentally more powerful than parametric polymorphism still stands however, because `(a)` C++ templates have other constraints, such as the template parameters needing to be compile-time constants, and `(b)` C++ templates do not actually implement 'pure' parametric polymorphism, but also implement a weak version of dependent types (I say weak because of the constraint `(a)`). The `std::vector` example is a case where we only use templates to get parametric polymorphism, and where we don't utilize the weak dependent type features available in C++.
+</details>
+</div>
+
 
 Many months ago, I began working through the textbook [Theorem Proving in Lean 4](https://leanprover.github.io/theorem_proving_in_lean4/). Alas, work picked up, life got in the way, my tendencies towards procrastination triumphed, and my plans were thwarted. This post marks the beginning of an attempt to restart this project; I plan to do a series explaining what I learn as I work through the textbook. Here we will cover some material from ~ chapters 1 - 4, with a particular focus on trying to understand dependent type systems and their uses. As an aside, I am basically completely new to formal methods / interactive theorem proving, so if you spot any errors or gaps in my understanding, please leave a comment (as an aside, we now have comments through [giscus](https://giscus.app/)!).
 
