@@ -24,13 +24,7 @@ description: "Dependent Types and the Curry-Howard Correspondence."
 
 <div className="text-red-800 [&_a]:text-red-800">
 
-DISCLAIMER: I do not have a background in type theory, so there are some inaccuracies and oversimplifications in this post. Please see the comments on [this reddit post](https://www.reddit.com/r/ProgrammingLanguages/comments/1px72jq/blog_notes_on_learning_lean_dependent_types_type/) for more. The main errors are:
-
-<details>
-1. **Types vs Sets**: I say that types are sets of values in the 'what are type systems' section of this post; this is an oversimplification.
-2. **Russell's Paradox**: The formalization given of Russell's paradox is incorrect due to conflating `TypeSet` and `Type`. I will update this post soon to include a corrected version.
-3. **Comparison to C++**: When comparing dependent types and C++ templates, a better comparison to Lean's `Vec` type would have been `std::array` instead of `std::vector`. With `std::array`, it actually _is_ possible to implement the desired behavior in C++ since we can specialize the `std::array` type to specific lengths (e.g. we can write the type `std::array<int, 8>`). The point about dependent types being fundamentally more powerful than parametric polymorphism still stands however, because `(a)` C++ templates have other constraints, such as the template parameters needing to be compile-time constants, and `(b)` C++ templates do not actually implement 'pure' parametric polymorphism, but also implement a weak version of dependent types (I say weak because of the constraint `(a)`). The `std::vector` example is a case where we only use templates to get parametric polymorphism, and where we don't utilize the weak dependent type features available in C++.
-</details>
+DISCLAIMER: I do not have a background in type theory, so there are some inaccuracies and oversimplifications in this post. Please see [these comments on Reddit](https://www.reddit.com/r/ProgrammingLanguages/comments/1px72jq/blog_notes_on_learning_lean_dependent_types_type/) for more. Since originally being published, I've edited the post so that the encoding of Russell's Paradox is now (to the best of my knowledge) correct; you can see the version history of the blog post [here](https://github.com/rao-ashish/personal-website/commits/main/posts/dependent_types_intro.mdx). Some other corrections have also been inlined in the relevant sections.
 </div>
 
 
@@ -48,6 +42,8 @@ Proofs in Lean leverage its expressive type system. Specifically, we encode stat
 ## What are type systems anyway?
 
 A type is a set of values that an expression can evaluate to. Type systems make sure that a type can be deduced for all expressions in your program; they help you guarantee that expressions in your code take on only some specific set of values. For example, if we have `int x = SomeFunction(y);` in a well-typed program, we know that `SomeFunction(y)` will always evaluate to an integer. This prevents bugs like calling a function with arguments that aren't meaningful (what does `x + 1` mean if `x` is a hashtable?), or accidentally manipulating a variable under the assumption it holds data of a specific type when it actually holds data of a different one.
+
+<div className="text-red-800 [&_a]:text-red-800"> Note: As pointed out in [this comment on Reddit](https://www.reddit.com/r/ProgrammingLanguages/comments/1px72jq/comment/nwbd073/), saying that types are just sets of values is an oversimplification. Please see the comment for more details.</div>
 
 ARM assembly language is an example of an untyped language; the programmer just manipulates bytes, and if they make a mistake like thinking a variable holds integer data when it's actually holding something else, well, too bad. Python is an example of a dynamically typed language; as a Python program executes, the interpreter ensures you aren't doing something strange like trying to add a linked list and a dictionary, and if it detects something wrong, an exception is thrown. C++ is an example of a statically typed language; you can't run your program at all if it's not well-typed (an ill-typed program won't compile).
 
@@ -131,7 +127,12 @@ std::vector<uint> AddVector8(std::vector<uint> v1, std::vector<uint> v2) {
 }
 ```
 
-Unlike the program in Lean, we cannot bake the size of the vector into its type. As such, we need to rely on _runtime_ checks on its size instead of Lean's _compile time_ type checking.
+Unlike the program in Lean, `std::vector` does not bake the size of the vector into its type. As such, we need to rely on _runtime_ checks on its size instead of Lean's _compile time_ type checking.
+
+<div className="text-red-800 [&_a]:text-red-800">
+
+As pointed out by [this comment on Reddit](https://www.reddit.com/r/ProgrammingLanguages/comments/1px72jq/comment/nwcq0em/), a better comparison to Lean's `Vec` type would have been `std::array` instead of `std::vector`. With `std::array`, it actually _is_ possible to implement the desired behavior in C++ since we can specialize the `std::array` type to specific lengths (e.g. we can write the type `std::array<int, 8>`). The point about dependent types being fundamentally more powerful than parametric polymorphism still stands however, because `(a)` C++ templates have other constraints, such as the template parameters needing to be compile-time constants, and `(b)` C++ templates do not actually implement 'pure' parametric polymorphism, but also implement a weak version of dependent types (I say weak because of the constraint `(a)`). The `std::vector` example is a case where we only use templates to get parametric polymorphism, and where we don't utilize the weak dependent type features available in C++.
+</div>
 
 
 ## Some basic proofs in Lean
@@ -225,32 +226,94 @@ It's nice that `Prop` is impredicative because it allows us to express logical s
 
 ### What goes wrong without type universes?
 
-If we didn't have type universes, we could write down programs like this:
+Without type universes, Lean would be inconsistent; we would be able to prove `False`. For example, we could do so by constructing Russell's Paradox: "If S is the set of all sets that do not contain themselves, does S contain itself?". This is shown below, and is my best effort to translate [this formalization in Agda](https://1lab.dev/1Lab.Counterexamples.Russell.html#russells-paradox) (as recommended by [this Reddit comment](https://www.reddit.com/r/ProgrammingLanguages/comments/1px72jq/comment/nwbd073/)) to Lean.
+
+Imagine that Lean did not have universe levels. We could represent sets by associating with each set an 'index type' `A`, and an 'indexing function' `f` that maps indices (i.e. values of the index type) to elements of the set:
 
 ```
-def TypeSet := Type → Prop
-def S : TypeSet := fun (T : TypeSet) => ¬(T T)
-
-def contradiction : False :=
-  have hnss : ¬(S S) := fun (h : S S) => h h
-  have hss : (S S) := hnss
-  hnss hss
+inductive SetType : Type
+| set (A : Type) (f : A → SetType) : SetType
 ```
 
-The above encodes Russell's Paradox: "If S is the set of all sets that do not contain themselves, does S contain itself?". In the program, we represent sets of types using `TypeSet`. If `A` is a `TypeSet`, then `A T` encodes the logical statement `T ∈ A`. If we are able to construct a value of type `A T`, we have proved that `T ∈ A`. After defining `TypeSet`, we define a specific `TypeSet S`, where `S T` is true only if `T ∉ T`. Finally, we use this to prove `False`. We know that `S ∉ S` because if `S ∈ S`, from the definition of `S` we have that `S ∉ S`. Since we know `S ∉ S`, this also means by the definition of `S` that `S ∈ S`. Thus, we have a contradiction. 
+Note that the values contained inside sets represented by elements of `SetType` can only be other `SetType` objects.
 
-Type universes prevent this problem by making it impossible to write down `S` as defined above (the type checker would throw an error). Since `TypeSet := Type → Prop`, `TypeSet ∈ Sort 2` (because `Type : Sort 2` and `Prop : Sort 1`, we take the max and get `Sort 2` for `TypeSet`). Since `TypeSet ∈ Sort 2`, the `T T` inside the definition of `S` is ill-typed because `T` is a function type that expects an input with type `Type` (i.e. it expects an argument inside `Sort 1`) but we are trying to pass in an argument inside `Sort 2`, which has a fundamentally higher universe level. Lean gives the following error when type checking the program at that line:
+We define a relation saying that a set `S` contains an element `x` by mapping `x` and `S` to a proposition stating that there exists some value of the index type for which the 'indexing function' returns `x`:
 
 ```
-Application type mismatch: The argument
-  T
-has type
-  TypeSet
-but is expected to have type
+def contains (x : SetType) (S : SetType) : Prop :=
+  match S with
+  | SetType.set A f =>  ∃ a : A, f a = x
+```
+
+We define the Russell set (the set of all sets that do not contain themselves) by specifying the index type to essentially be a pair of values, the first being some specific `SetType`, and the second being a proof that this `SetType` does not contain itself. The indexing function just selects the first element of the index (the `SetType` which we know to not contain itself).
+
+```
+def russell_index : Type := { S : SetType // ¬ contains S S }
+
+def russell_set : SetType :=
+  SetType.set russell_index Subtype.val
+```
+
+We can now exhibit a contradiction by proving both that the russell set contains itself, and that it does not contain itself:
+
+```
+theorem russell_not_in_russell : ¬ contains russell_set russell_set :=
+  fun (r_in_r : contains russell_set russell_set) =>
+    Exists.elim r_in_r (
+      fun (i : russell_index) =>
+      fun (_ : i.val = russell_set) =>
+        have hn : ¬ contains russell_set russell_set := i.property
+        hn r_in_r
+    )
+
+theorem russell_in_russell : contains russell_set russell_set :=
+  have index_val : russell_index := ⟨russell_set, russell_not_in_russell⟩
+  ⟨index_val, rfl⟩
+
+def paradox : False :=
+  russell_not_in_russell russell_in_russell
+```
+
+Type universes prevent us from being able to write the program above by rejecting the definition of `SetType` from the very get-go. When we write
+
+```
+inductive SetType : Type
+| set (A : Type) (f : A → SetType) : SetType
+```
+
+we see that `A : Type` is in universe `Sort 2`, and `f : A → SetType` is in universe `Sort 2`, so `SetType` must be in universe `Sort 2` (aka `Type 1`), but we have specified that it is inside `Sort 1` (because we wrote `SetType : Type`). Lean reports the following error reflecting this issue:
+
+```
+Invalid universe level in constructor `SetType.set`: Parameter `A` has type
   Type
-in the application
-  T T
+at universe level
+  2
+which is not less than or equal to the inductive type's resulting universe level
+  1
 ```
+
+There is actually a second issue with the above proof, which is when we try to eliminate `r_in_r` inside `russell_not_in_russell` via `Exists.elim r_in_r`. `Prop`s have a property called _proof irrelevance_, which means that Lean treats any two values whose type is some `Prop` as definitionally equal. As such, we cannot elimiate `r_in_r` because Lean 'refuses to remember' that 'underneath' `r_in_r` is actually a proof of `∃ a : A, f a = x`. If we had rewritten the above proof to represent propositions at some other level of the universe hierarchy that did not have this proof irrelevance property (i.e. any universe level other than `Prop`), then the universe level mismatch would be the only issue.
+
+You might ask, what happens if we try to make `SetType` a member of `Type 1` instead of `Type`?
+
+```
+inductive SetType : Type 1
+| set (A : Type) (f : A → SetType) : SetType
+```
+
+In this case, we get a universe level error at `def russell_index : Type := { S : SetType // ¬ contains S S }`:
+
+```
+failed to solve universe constraint
+  1 =?= max 1 ?u.556
+while trying to unify
+  Type : Type 1
+with
+  Type 1 : Type 2
+```
+
+The issue is that the RHS of `def russell_index` is assigned universe level `Sort 2` because of its inclusion of `SetType`, but we declared `russell_index` to be inside universe `Sort 1` (because we said `russell_index : Type`), creating a contradiction that the type checker cannot resolve.
+
 
 ### Why do type universes guarantee that we cannot create contradictions?
 
@@ -361,7 +424,7 @@ Inductive types are covered in chapter 7, so we're getting ahead of ourselves (t
 
 ### Encoding Russell's Paradox
 
-Here was my first attempt encoding Russell's Paradox.
+#### A First Attempt
 
 ```
 -- (is_in A B) means that A ∈ B.
@@ -386,3 +449,17 @@ def contradiction : False :=
 It turns out that this program type-checks just fine in Lean! I was surprised at this, because I thought that this is exactly the kind of thing Lean is supposed to prevent you from doing? 
 
 The issue here is that the `axiom` keyword is basically telling Lean "hey, just trust me that there exists in scope a value of this type". In some sense, by using `axiom`, we are bypassing the constraints that the type checker would impose on us. Rather than just asserting the existence of an object `S` with the property `def_S`, we need to encode things in a way such that we construct `S` with this property, as in the presentation in the 'type universes' section above.
+
+#### A Second Attempt
+
+```
+def TypeSet := Type → Prop
+def S : TypeSet := fun (T : TypeSet) => ¬(T T)
+
+def contradiction : False :=
+  have hnss : ¬(S S) := fun (h : S S) => h h
+  have hss : (S S) := hnss
+  hnss hss
+```
+
+Unfortunately, as pointed out by [this comment on Reddit](https://www.reddit.com/r/ProgrammingLanguages/comments/1px72jq/comment/nwbd073/), this program would not compile _even if_ we did not have universe levels and allowed `Type : Type`. This is because the program conflates `Type` and `TypeSet`; the definition of `S` tries to apply `T` to argument `T`, but `T` expects as its first input a value with type `Type`, whereas the argument `T` has type `TypeSet`. This is a "classic type error", and has nothing to do with universe levels.
